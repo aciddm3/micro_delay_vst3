@@ -1,6 +1,7 @@
 use nih_plug::plugin::vst3::Vst3Plugin;
 use nih_plug::prelude::*;
 use nih_plug::wrapper::vst3::subcategories::Vst3SubCategory;
+use nih_plug_egui::{EguiState, create_egui_editor, egui, widgets};
 use std::sync::Arc;
 
 mod utils;
@@ -89,7 +90,6 @@ impl Default for DParams {
         }
     }
 }
-#[derive(Default)]
 struct Delay {
     params: Arc<DParams>,
     samplerate: f32,
@@ -101,6 +101,25 @@ struct Delay {
     wet1_automation_samples: Vec<f32>,
     feedback1_automation_samples: Vec<f32>,
     delay1_automation_samples: Vec<f32>,
+
+    editor_state: Arc<EguiState>,
+}
+
+impl Default for Delay {
+    fn default() -> Self {
+        Self {
+            params: Default::default(),
+            samplerate: Default::default(),
+            channel_buffer: Default::default(),
+            buffer_size: Default::default(),
+            current_arrow_pos: Default::default(),
+            dry_automation_samples: Default::default(),
+            wet1_automation_samples: Default::default(),
+            feedback1_automation_samples: Default::default(),
+            delay1_automation_samples: Default::default(),
+            editor_state: EguiState::from_size(640, 480),
+        }
+    }
 }
 
 impl Plugin for Delay {
@@ -113,13 +132,22 @@ impl Plugin for Delay {
     const EMAIL: &'static str = "None";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
-        main_input_channels: NonZeroU32::new(1),
-        main_output_channels: NonZeroU32::new(1),
-        aux_input_ports: &[],
-        aux_output_ports: &[],
-        names: PortNames::const_default(),
-    }];
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
+        AudioIOLayout {
+            main_input_channels: NonZeroU32::new(1),
+            main_output_channels: NonZeroU32::new(1),
+            aux_input_ports: &[],
+            aux_output_ports: &[],
+            names: PortNames::const_default(),
+        },
+        AudioIOLayout {
+            main_input_channels: NonZeroU32::new(2),
+            main_output_channels: NonZeroU32::new(2),
+            aux_input_ports: &[],
+            aux_output_ports: &[],
+            names: PortNames::const_default(),
+        },
+    ];
 
     const MIDI_INPUT: MidiConfig = MidiConfig::None;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
@@ -176,21 +204,27 @@ impl Plugin for Delay {
             .dry
             .smoothed
             .next_block(dry_samples, samples_per_buffer);
-        dry_samples.iter_mut().for_each(|s| *s = utils::db_to_gain(*s));
+        dry_samples
+            .iter_mut()
+            .for_each(|s| *s = utils::db_to_gain(*s));
 
         let wet1_samples = &mut self.wet1_automation_samples;
         self.params
             .wet1
             .smoothed
             .next_block(wet1_samples, samples_per_buffer);
-        wet1_samples.iter_mut().for_each(|s| *s = utils::db_to_gain(*s));
+        wet1_samples
+            .iter_mut()
+            .for_each(|s| *s = utils::db_to_gain(*s));
 
         let feedback1_samples = &mut self.feedback1_automation_samples;
         self.params
             .fb1
             .smoothed
             .next_block(feedback1_samples, samples_per_buffer);
-        feedback1_samples.iter_mut().for_each(|s| *s = utils::db_to_gain(*s));
+        feedback1_samples
+            .iter_mut()
+            .for_each(|s| *s = utils::db_to_gain(*s));
 
         let delay1_samples = &mut self.delay1_automation_samples;
         self.params
@@ -220,7 +254,7 @@ impl Plugin for Delay {
                 let feedback = value_to_play
                     * feedback1_samples[sample_idx]
                     * utils::factor_sign(self.params.inverse_fb1.value());
-                
+
                 current_delay_buffer[*arrow_pos] = *sample + feedback;
 
                 // Вычисление компонент
@@ -245,7 +279,47 @@ impl Plugin for Delay {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        None
+        let params = self.params.clone();
+
+        create_egui_editor(
+            self.editor_state.clone(),
+            (),               // Данные для синхронизации, если нужны
+            |_ctx, _data| {}, // Инициализация
+            move |egui_ctx, setter, _data| {
+                egui::CentralPanel::default().show(egui_ctx, |ui| {
+                    ui.heading("MicroDelay");
+                    ui.separator();
+
+                    // Стандартный слайдер для Dry
+                    ui.label("Dry Level");
+                    ui.add(widgets::ParamSlider::for_param(&params.dry, setter));
+
+                    ui.separator();
+
+                    ui.label("Wet Level");
+                    ui.add(widgets::ParamSlider::for_param(&params.wet1, setter));
+                    ui.label("Inverse Wet");
+                    ui.add(widgets::ParamSlider::for_param(
+                        &params.inverse_wet1,
+                        setter,
+                    ));
+
+                    ui.separator();
+
+                    ui.label("Delay (microsec)");
+                    ui.add(widgets::ParamSlider::for_param(&params.delay1, setter));
+
+                    ui.separator();
+
+                    ui.label("Feedback");
+                    ui.add(widgets::ParamSlider::for_param(&params.fb1, setter));
+                    ui.label("Inverse feedback");
+                    ui.add(widgets::ParamSlider::for_param(&params.inverse_fb1, setter));
+
+                    // Чекбоксы для инверсии
+                });
+            },
+        )
     }
 }
 
