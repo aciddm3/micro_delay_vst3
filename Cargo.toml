@@ -15,6 +15,7 @@ crate-type = ["cdylib"] # Создает динамическую библиот
 lto = true
 
 [dependencies]
+egui = "0.33.3"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug", features = ["vst3"] }
 nih_plug_derive = { git = "https://github.com/robbert-vdh/nih-plug" } 
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
