@@ -3,10 +3,9 @@ pub struct DelayLine {
     pub delay: f32,
     pub samplerate: f32,
     pub channel_delay_buffer: Vec<Vec<f32>>,
-    pub buffer_size: usize,
+    pub delay_buffer_size: usize,
     pub current_arrow_pos: Vec<isize>,
 
-    pub gain_automation_samples: Vec<f32>,
     pub feedback_automation_samples: Vec<f32>,
 
     pub delay_automation_samples: Vec<f32>,
@@ -23,9 +22,8 @@ impl DelayLine {
         self.delay = 0.0;
         self.samplerate = samplerate;
         self.channel_delay_buffer = vec![vec![0.0; delay_buffer_size]; channels_number];
-        self.buffer_size = delay_buffer_size;
+        self.delay_buffer_size = delay_buffer_size;
         self.current_arrow_pos = vec![0; channels_number];
-        self.gain_automation_samples = vec![0.0; max_buffer_size];
         self.feedback_automation_samples = vec![0.0; max_buffer_size];
         self.delay_automation_samples = vec![0.0; max_buffer_size];
     }
@@ -37,11 +35,19 @@ impl DelayLine {
         let delay_time_whole_samples = self.delay.ceil() as isize;
         let interpolation_ratio = self.delay.fract();
 
+        let mut idx_a = *arrow_pos - delay_time_whole_samples;
+        while idx_a < 0 {
+            idx_a += self.delay_buffer_size as isize;
+        }
+
+        let mut idx_b = idx_a + 1;
+        if idx_b >= self.delay_buffer_size as isize {
+            idx_b = 0;
+        }
+
         crate::utils::convex(
-            current_delay_buffer[(*arrow_pos - delay_time_whole_samples)
-                .rem_euclid(self.buffer_size as isize) as usize],
-            current_delay_buffer[(*arrow_pos - delay_time_whole_samples + 1)
-                .rem_euclid(self.buffer_size as isize) as usize],
+            current_delay_buffer[idx_a as usize],
+            current_delay_buffer[idx_b as usize],
             interpolation_ratio,
         )
     }
@@ -54,15 +60,15 @@ impl DelayLine {
     }
 
     pub fn move_arrow_over_channel(&mut self, channel_idx: usize) {
-        if self.current_arrow_pos[channel_idx] >= self.buffer_size as isize - 1 {
+        if self.current_arrow_pos[channel_idx] >= self.delay_buffer_size as isize - 1 {
             self.current_arrow_pos[channel_idx] = 0
         } else {
             self.current_arrow_pos[channel_idx] += 1
         }
     }
 
-    pub fn set_delay(&mut self, delay_in_samples: f32) {
-        self.delay = delay_in_samples;
+    pub fn set_delay(&mut self, delay_in_float_samples: f32) {
+        self.delay = delay_in_float_samples;
     }
 
     pub fn reset(&mut self) {
