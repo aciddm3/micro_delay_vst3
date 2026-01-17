@@ -4,6 +4,7 @@ use nih_plug::wrapper::vst3::subcategories::Vst3SubCategory;
 use nih_plug_egui::{EguiState, create_egui_editor, egui, widgets};
 use std::sync::Arc;
 
+mod delay_line;
 mod utils;
 
 #[derive(Params)]
@@ -93,14 +94,8 @@ impl Default for DParams {
 struct Delay {
     params: Arc<DParams>,
     samplerate: f32,
-    channel_buffer: Vec<Vec<f32>>,
-    buffer_size: usize,
-    current_arrow_pos: Vec<usize>,
-
+    line_a: delay_line::DelayLine,
     dry_automation_samples: Vec<f32>,
-    wet1_automation_samples: Vec<f32>,
-    feedback1_automation_samples: Vec<f32>,
-    delay1_automation_samples: Vec<f32>,
 
     editor_state: Arc<EguiState>,
 }
@@ -110,13 +105,11 @@ impl Default for Delay {
         Self {
             params: Default::default(),
             samplerate: Default::default(),
-            channel_buffer: Default::default(),
-            buffer_size: Default::default(),
-            current_arrow_pos: Default::default(),
+
             dry_automation_samples: Default::default(),
-            wet1_automation_samples: Default::default(),
-            feedback1_automation_samples: Default::default(),
-            delay1_automation_samples: Default::default(),
+
+            line_a: Default::default(),
+
             editor_state: EguiState::from_size(640, 480),
         }
     }
@@ -170,25 +163,35 @@ impl Plugin for Delay {
             .map(|n| n.get())
             .unwrap_or(0);
 
-        self.buffer_size = (self.samplerate * MAX_DELAY_TIME / 100_000.0) as usize + 5;
-        self.channel_buffer
-            .resize(num_channels as usize, vec![0.0; self.buffer_size]);
+        self.line_a.buffer_size = (self.samplerate * MAX_DELAY_TIME / 100_000.0) as usize + 5;
+        self.line_a
+            .channel_delay_buffer
+            .resize(num_channels as usize, vec![0.0; self.line_a.buffer_size]);
         // Буфер на MAX_DELAY_TIME
         // + 5 сэмплов на всякий случай
 
-        self.current_arrow_pos.resize(num_channels as usize, 0);
+        self.line_a
+            .current_arrow_pos
+            .resize(num_channels as usize, 0);
         // инициализируем позиции кареток
+        
+        self.line_a.gain_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
+        self.line_a.feedback_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
+        self.line_a.delay_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
+        
+        self.line_a.init(
+            (self.samplerate * MAX_DELAY_TIME / 10e6) as usize + 5,
+            num_channels as usize,
+            buffer_config.max_buffer_size as usize,
+            self.samplerate,
+        );
 
         self.dry_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.wet1_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.feedback1_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.delay1_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
         true
     }
 
     fn reset(&mut self) {
-        self.channel_buffer.iter_mut().for_each(|s| s.fill(0.0));
-        self.current_arrow_pos.fill(0);
+        self.line_a.reset();
     }
 
     fn process(
@@ -198,7 +201,7 @@ impl Plugin for Delay {
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let samples_per_buffer = buffer.samples();
-
+        // заполнение автоматизации
         let dry_samples = &mut self.dry_automation_samples;
         self.params
             .dry
@@ -208,70 +211,52 @@ impl Plugin for Delay {
             .iter_mut()
             .for_each(|s| *s = utils::db_to_gain(*s));
 
-        let wet1_samples = &mut self.wet1_automation_samples;
         self.params
             .wet1
             .smoothed
-            .next_block(wet1_samples, samples_per_buffer);
-        wet1_samples
+            .next_block(&mut self.line_a.gain_automation_samples, samples_per_buffer);
+        self.line_a.gain_automation_samples
             .iter_mut()
             .for_each(|s| *s = utils::db_to_gain(*s));
 
-        let feedback1_samples = &mut self.feedback1_automation_samples;
         self.params
             .fb1
             .smoothed
-            .next_block(feedback1_samples, samples_per_buffer);
-        feedback1_samples
+            .next_block(&mut self.line_a.feedback_automation_samples, samples_per_buffer);
+        self.line_a.feedback_automation_samples
             .iter_mut()
             .for_each(|s| *s = utils::db_to_gain(*s));
 
-        let delay1_samples = &mut self.delay1_automation_samples;
         self.params
             .delay1
             .smoothed
-            .next_block(delay1_samples, samples_per_buffer);
+            .next_block( &mut self.line_a.delay_automation_samples, samples_per_buffer);
 
         for (channel_idx, samples) in buffer.as_slice().iter_mut().enumerate() {
-            let arrow_pos = &mut self.current_arrow_pos[channel_idx];
-            let current_delay_buffer = &mut self.channel_buffer[channel_idx];
             for (sample_idx, sample) in samples.iter_mut().enumerate() {
-                let delay_time_in_samples_f = self.samplerate * delay1_samples[sample_idx] / 1e6;
-                let delay_time_whole_samples = delay_time_in_samples_f.ceil() as usize;
-                let interpolation_ratio = delay_time_in_samples_f.fract();
+                self.line_a
+                    .set_delay(self.samplerate * self.line_a.delay_automation_samples[sample_idx] / 1e6);
 
-                let value_to_play = utils::convex(
-                    current_delay_buffer[(*arrow_pos as isize - delay_time_whole_samples as isize)
-                        .rem_euclid(self.buffer_size as isize)
-                        as usize],
-                    current_delay_buffer[(*arrow_pos as isize - delay_time_whole_samples as isize
-                        + 1)
-                    .rem_euclid(self.buffer_size as isize)
-                        as usize],
-                    interpolation_ratio,
-                );
+                let value_to_play = self.line_a.read_value_from_channel(channel_idx);
 
                 let feedback = value_to_play
-                    * feedback1_samples[sample_idx]
+                    * self.line_a.feedback_automation_samples[sample_idx]
                     * utils::factor_sign(self.params.inverse_fb1.value());
 
-                current_delay_buffer[*arrow_pos] = *sample + feedback;
+                self.line_a
+                    .write_value_to_channel(*sample + feedback, channel_idx);
 
                 // Вычисление компонент
                 let dry_component = *sample * dry_samples[sample_idx];
                 let wet_component = value_to_play
-                    * wet1_samples[sample_idx]
+                    * self.line_a.gain_automation_samples[sample_idx]
                     * utils::factor_sign(self.params.inverse_wet1.value());
 
                 // Смешивание
                 *sample = dry_component + wet_component;
 
                 // сдвиг каретки
-                *arrow_pos += 1;
-                // возврат каретки
-                if *arrow_pos >= self.buffer_size {
-                    *arrow_pos = 0;
-                }
+                self.line_a.move_arrow_over_channel(channel_idx);
             }
         }
 
