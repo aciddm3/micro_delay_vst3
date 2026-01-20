@@ -1,0 +1,52 @@
+name: Build binaries on release
+
+on:
+  release:
+    types: ['published']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - name: Build VST3 for Linux
+        run: cargo run --package xtask --release bundle microdelay
+      
+      - uses: softprops/action-gh-release@v2
+        with:
+          files:
+            ./target/bundled/microdelay.vst3/Contents/x86_64-linux/microdelay.so
+
+  build-windows:
+    name: Build for Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install Rust (MSVC)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Build VST3 for Windows
+        run: cargo run --package xtask --release bundle microdelay
+      
+      - uses: softprops/action-gh-release@v2
+        with:
+          files:
+            ./target/bundled/microdelay.vst3/Contents/x86_64-win/microdelay.dll
