@@ -19,10 +19,13 @@ jobs:
         with:
           cache-on-failure: true
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build VST3 for Linux
-        run: cargo run --package xtask --release bundle microdelay
+      - name: Build xtask
+        run: cargo build --release --bin xtask
+
+      - name: Build VST3 bundle for Linux
+        run: cargo xtask bundle microdelay --release
       
       - uses: softprops/action-gh-release@v2
         with:
@@ -41,12 +44,15 @@ jobs:
           cache-on-failure: true
 
       - name: Install Rust (MSVC)
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Build VST3 for Windows
-        run: cargo run --package xtask --release bundle microdelay
+      - name: Build xtask
+        run: cargo build --release --bin xtask
+
+      - name: Build VST3 bundle for Windows
+        run: cargo xtask bundle microdelay --release
       
       - uses: softprops/action-gh-release@v2
         with:
           files:
-            ./target/bundled/microdelay.vst3/Contents/x86_64-win/microdelay.dll
+            ./target/bundled/microdelay.vst3/Contents/x86_64-windows/microdelay.dll
