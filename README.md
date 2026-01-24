@@ -17,11 +17,12 @@ There are 11 parameters:
 - Send from LB to LA
 - LB delay time
 
-Every send parameter takes values from -1 to 1.
+Every send parameter takes values from -100% to 100%.
 
 Every delay time parameter takes values from 0.025 milliseconds to 16000.00 milliseconds.
 
 ![Plugin Circuit and interface proposed future implementation interface](https://github.com/aciddm3/micro_delay_vst3/tree/master/res/Delay.png)
+
 ## TODO
 
 - [ ] Improve GUI:
@@ -30,14 +31,20 @@ Every delay time parameter takes values from 0.025 milliseconds to 16000.00 mill
 - [ ] Add Pan knobs (it's useful to make haas effect)
 - [ ] Add Filters
 
-## Compiling
+## Building
 
 To compile it to bundle, use this command:
-\```sh
-cargo run --package xtask --release bundle microdelay
-\```
+> cargo run --package xtask --release bundle microdelay
 
 ## Dependencies
 
+### Crates
+
 - egui,
 - nih_plug
+
+### Packages
+
+- gl
+- pkg-config
+- x11-xcb

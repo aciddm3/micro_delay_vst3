@@ -49,7 +49,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),                                                                                            
             in_send_a: FloatParam::new(
                 "Input to A",
                 100.0,
@@ -58,7 +58,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             in_send_b: FloatParam::new(
                 "Input to B",
                 100.0,
@@ -67,7 +67,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             a_send_out: FloatParam::new(
                 "A to out",
                 0.0,
@@ -76,7 +76,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             b_send_out: FloatParam::new(
                 "B to out",
                 0.0,
@@ -85,7 +85,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             a_send_b: FloatParam::new(
                 "A to B",
                 0.0,
@@ -94,7 +94,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             b_send_a: FloatParam::new(
                 "B to A",
                 0.0,
@@ -103,7 +103,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
 
             fb_a: FloatParam::new(
                 "Feedback A",
@@ -113,7 +113,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
             fb_b: FloatParam::new(
                 "Feedback B",
                 0.0,
@@ -122,7 +122,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.2}%", s))),
+            .with_unit("%"),
 
             delay_a: FloatParam::new(
                 "Delay A",
@@ -132,7 +132,7 @@ impl Default for DParams {
                     max: MAX_DELAY_TIME,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.3} ms", s))),
+            .with_unit("ms"),
             delay_b: FloatParam::new(
                 "Delay B",
                 500.0,
@@ -141,7 +141,7 @@ impl Default for DParams {
                     max: MAX_DELAY_TIME,
                 },
             )
-            .with_value_to_string(Arc::new(|s| format!("{:.3} ms", s))),
+            .with_unit("ms"),
         }
     }
 }
