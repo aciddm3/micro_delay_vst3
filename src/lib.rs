@@ -33,6 +33,15 @@ struct DParams {
     pub fb_b: FloatParam,
     #[id = "b_to_a_send"]
     pub b_send_a: FloatParam,
+
+    #[id = "in_to_A_pan"]
+    pub in_send_a_pan: FloatParam,
+    #[id = "A_to_out_pan"]
+    pub a_send_out_pan: FloatParam,
+    #[id = "in_to_B_pan"]
+    pub in_send_b_pan: FloatParam,
+    #[id = "B_to_out_pan"]
+    pub b_send_out_pan: FloatParam,
 }
 
 const MIN_DELAY_TIME: f32 = 0.025; // milliseconds
@@ -49,7 +58,7 @@ impl Default for DParams {
                     max: 100.0,
                 },
             )
-            .with_unit("%"),                                                                                            
+            .with_unit("%"),
             in_send_a: FloatParam::new(
                 "Input to A",
                 100.0,
@@ -142,6 +151,26 @@ impl Default for DParams {
                 },
             )
             .with_unit("ms"),
+            in_send_a_pan: FloatParam::new(
+                "In to A pan",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            ).with_value_to_string(Arc::new(|s| format!("{s:.2}"))),
+            a_send_out_pan: FloatParam::new(
+                "A to out pan",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            ).with_value_to_string(Arc::new(|s| format!("{s:.2}"))),
+            in_send_b_pan: FloatParam::new(
+                "In to B pan",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            ).with_value_to_string(Arc::new(|s| format!("{s:.2}"))),
+            b_send_out_pan: FloatParam::new(
+                "B to out pan",
+                0.5,
+                FloatRange::Linear { min: 0.0, max: 1.0 },
+            ).with_value_to_string(Arc::new(|s| format!("{s:.2}"))),
         }
     }
 }
@@ -162,6 +191,11 @@ struct Delay {
     a_send_b_automation_samples: Vec<f32>,
     b_send_a_automation_samples: Vec<f32>,
 
+    in_send_a_pan_automation_samples: Vec<f32>,
+    a_send_out_pan_automation_samples: Vec<f32>,
+    in_send_b_pan_automation_samples: Vec<f32>,
+    b_send_out_pan_automation_samples: Vec<f32>,
+
     editor_state: Arc<EguiState>,
 }
 
@@ -180,10 +214,15 @@ impl Default for Delay {
             a_send_b_automation_samples: Default::default(),
             b_send_a_automation_samples: Default::default(),
 
+            in_send_a_pan_automation_samples: Default::default(),
+            a_send_out_pan_automation_samples: Default::default(),
+            in_send_b_pan_automation_samples: Default::default(),
+            b_send_out_pan_automation_samples: Default::default(),
+
             line_a: Default::default(),
             line_b: Default::default(),
 
-            editor_state: EguiState::from_size(740, 435),
+            editor_state: EguiState::from_size(740, 475),
         }
     }
 }
@@ -198,22 +237,13 @@ impl Plugin for Delay {
     const EMAIL: &'static str = "None";
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[
-        AudioIOLayout {
-            main_input_channels: NonZeroU32::new(1),
-            main_output_channels: NonZeroU32::new(1),
-            aux_input_ports: &[],
-            aux_output_ports: &[],
-            names: PortNames::const_default(),
-        },
-        AudioIOLayout {
-            main_input_channels: NonZeroU32::new(2),
-            main_output_channels: NonZeroU32::new(2),
-            aux_input_ports: &[],
-            aux_output_ports: &[],
-            names: PortNames::const_default(),
-        },
-    ];
+    const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
+        main_input_channels: NonZeroU32::new(2),
+        main_output_channels: NonZeroU32::new(2),
+        aux_input_ports: &[],
+        aux_output_ports: &[],
+        names: PortNames::const_default(),
+    }];
 
     const MIDI_INPUT: MidiConfig = MidiConfig::None;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
@@ -250,13 +280,20 @@ impl Plugin for Delay {
             self.samplerate,
         );
 
-        self.in_send_a_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.in_send_b_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.a_send_out_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.b_send_out_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.dry_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.a_send_b_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
-        self.b_send_a_automation_samples = vec![0.0; buffer_config.max_buffer_size as usize];
+        let max_buffer_size = buffer_config.max_buffer_size as usize;
+
+        self.in_send_a_automation_samples = vec![0.0; max_buffer_size];
+        self.in_send_b_automation_samples = vec![0.0; max_buffer_size];
+        self.a_send_out_automation_samples = vec![0.0; max_buffer_size];
+        self.b_send_out_automation_samples = vec![0.0; max_buffer_size];
+        self.dry_automation_samples = vec![0.0; max_buffer_size];
+        self.a_send_b_automation_samples = vec![0.0; max_buffer_size];
+        self.b_send_a_automation_samples = vec![0.0; max_buffer_size];
+
+        self.in_send_a_pan_automation_samples = vec![0.0; max_buffer_size];
+        self.in_send_b_pan_automation_samples = vec![0.0; max_buffer_size];
+        self.b_send_out_pan_automation_samples = vec![0.0; max_buffer_size];
+        self.a_send_out_pan_automation_samples = vec![0.0; max_buffer_size];
 
         true
     }
@@ -273,6 +310,7 @@ impl Plugin for Delay {
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let block_len = buffer.samples();
+
         // заполнение автоматизации
         {
             self.params
@@ -320,6 +358,26 @@ impl Plugin for Delay {
                 .smoothed
                 .next_block(&mut self.dry_automation_samples, block_len);
 
+            self.params
+                .a_send_out_pan
+                .smoothed
+                .next_block(&mut self.a_send_out_pan_automation_samples, block_len);
+            self.params
+                .b_send_out_pan
+                .smoothed
+                .next_block(&mut self.b_send_out_pan_automation_samples, block_len);
+
+            self.params
+                .in_send_a_pan
+                .smoothed
+                .next_block(&mut self.in_send_a_pan_automation_samples, block_len);
+            self.params
+                .in_send_b_pan
+                .smoothed
+                .next_block(&mut self.in_send_b_pan_automation_samples, block_len);
+        }
+
+        {
             self.a_send_b_automation_samples
                 .iter_mut()
                 .for_each(|s| *s = utils::knob_gain(*s));
@@ -362,6 +420,49 @@ impl Plugin for Delay {
 
         for (channel_idx, samples) in buffer.as_slice().iter_mut().enumerate() {
             for (sample_idx, sample) in samples.iter_mut().enumerate() {
+                let (in_send_a_pan, in_send_b_pan, a_send_out_pan, b_send_out_pan) =
+                    if channel_idx % 2 == 0 {
+                        //left
+                        (
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.in_send_a_pan_automation_samples[sample_idx],
+                            )
+                            .0,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.in_send_b_pan_automation_samples[sample_idx],
+                            )
+                            .0,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.a_send_out_pan_automation_samples[sample_idx],
+                            )
+                            .0,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.b_send_out_pan_automation_samples[sample_idx],
+                            )
+                            .0,
+                        )
+                    } else {
+                        //right
+                        (
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.in_send_a_pan_automation_samples[sample_idx],
+                            )
+                            .1,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.in_send_b_pan_automation_samples[sample_idx],
+                            )
+                            .1,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.a_send_out_pan_automation_samples[sample_idx],
+                            )
+                            .1,
+                            utils::balance_ratio_to_stereo_coefficients(
+                                self.b_send_out_pan_automation_samples[sample_idx],
+                            )
+                            .1,
+                        )
+                    };
+
                 self.line_a
                     .set_delay(self.line_a.delay_automation_samples[sample_idx]);
                 self.line_b
@@ -373,7 +474,7 @@ impl Plugin for Delay {
                 // Внутри цикла по сэмплам:
                 self.line_a.write_value_to_channel(
                     // Умножаем входной сигнал на параметр посыла
-                    (*sample * self.in_send_a_automation_samples[sample_idx])
+                    (*sample * self.in_send_a_automation_samples[sample_idx] * in_send_a_pan)
                         + (value_to_play_b * self.b_send_a_automation_samples[sample_idx])
                         + (value_to_play_a * self.line_a.feedback_automation_samples[sample_idx]),
                     channel_idx,
@@ -381,7 +482,7 @@ impl Plugin for Delay {
 
                 self.line_b.write_value_to_channel(
                     // Аналогично для линии B
-                    (*sample * self.in_send_b_automation_samples[sample_idx])
+                    (*sample * self.in_send_b_automation_samples[sample_idx] * in_send_b_pan)
                         + (value_to_play_a * self.a_send_b_automation_samples[sample_idx])
                         + (value_to_play_b * self.line_b.feedback_automation_samples[sample_idx]),
                     channel_idx,
@@ -389,9 +490,8 @@ impl Plugin for Delay {
 
                 // Вычисление компонент
                 let dry_component = *sample * self.dry_automation_samples[sample_idx];
-                let wet_component = value_to_play_a
-                    * self.a_send_out_automation_samples[sample_idx]
-                    + value_to_play_b * self.b_send_out_automation_samples[sample_idx];
+                let wet_component = value_to_play_a * self.a_send_out_automation_samples[sample_idx] * a_send_out_pan
+                    + value_to_play_b * self.b_send_out_automation_samples[sample_idx] * b_send_out_pan;
 
                 // Смешивание
                 *sample = dry_component + wet_component;
@@ -425,13 +525,18 @@ impl Plugin for Delay {
 
                     // Используем сетку, чтобы повторить топологию Delay.png
                     egui::Grid::new("delay_matrix_grid")
-                        .spacing([60.0, 20.0])
+                        .spacing([60.0, 5.0])
                         .min_col_width(120.0)
                         .show(ui, |ui| {
                             // --- РЯД 1: Входные посылы (Верхние крутилки на схеме) ---
                             ui.vertical_centered(|ui| {
                                 ui.label(egui::RichText::new("INPUT -> A").color(COLOR_A));
                                 ui.add(widgets::ParamSlider::for_param(&params.in_send_a, setter));
+                                ui.label(egui::RichText::new("INPUT -> A \n BAL").color(COLOR_A));
+                                ui.add(widgets::ParamSlider::for_param(
+                                    &params.in_send_a_pan,
+                                    setter,
+                                ));
                             });
 
                             // Пустое место над Dry
@@ -440,6 +545,11 @@ impl Plugin for Delay {
                             ui.vertical_centered(|ui| {
                                 ui.label(egui::RichText::new("INPUT -> B").color(COLOR_B));
                                 ui.add(widgets::ParamSlider::for_param(&params.in_send_b, setter));
+                                ui.label(egui::RichText::new("INPUT -> B \n BAL").color(COLOR_B));
+                                ui.add(widgets::ParamSlider::for_param(
+                                    &params.in_send_b_pan,
+                                    setter,
+                                ));
                             });
                             ui.end_row();
 
@@ -505,6 +615,11 @@ impl Plugin for Delay {
                             ui.vertical_centered(|ui| {
                                 ui.label(egui::RichText::new("A -> OUT").color(COLOR_A));
                                 ui.add(widgets::ParamSlider::for_param(&params.a_send_out, setter));
+                                ui.label(egui::RichText::new("A -> OUT \n BAL").color(COLOR_A));
+                                ui.add(widgets::ParamSlider::for_param(
+                                    &params.a_send_out_pan,
+                                    setter,
+                                ));
                             });
 
                             ui.label(""); // Точка суммирования
@@ -512,6 +627,11 @@ impl Plugin for Delay {
                             ui.vertical_centered(|ui| {
                                 ui.label(egui::RichText::new("B -> OUT").color(COLOR_B));
                                 ui.add(widgets::ParamSlider::for_param(&params.b_send_out, setter));
+                                ui.label(egui::RichText::new("B -> OUT \n BAL").color(COLOR_B));
+                                ui.add(widgets::ParamSlider::for_param(
+                                    &params.b_send_out_pan,
+                                    setter,
+                                ));
                             });
                             ui.end_row();
                         });

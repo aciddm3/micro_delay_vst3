@@ -1011,7 +1011,7 @@ dependencies = [
 
 [[package]]
 name = "microdelay"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "egui 0.33.3",
  "nih_plug",
